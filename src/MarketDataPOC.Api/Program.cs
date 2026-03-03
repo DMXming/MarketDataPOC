@@ -1,14 +1,15 @@
-using System;
+using MarketDataPOC.Adapters;
+using MarketDataPOC.Api.Middleware;
+using MarketDataPOC.Core.Abstractions;
+using MarketDataPOC.Core.Processing;
+using MarketDataPOC.Subscriptions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi;
-using MarketDataPOC.Adapters;
-using MarketDataPOC.Core.Abstractions;
-using MarketDataPOC.Core.Processing;
-using MarketDataPOC.Subscriptions;
+using System;
 
 namespace MarketDataPOC.Api
 {
@@ -94,6 +95,9 @@ namespace MarketDataPOC.Api
                 app.UseExceptionHandler("/error");
                 app.UseHsts();
             }
+
+            // 指标收集中间件
+            app.UseMiddleware<MetricsMiddleware>();
 
             // 安全中间件
             app.UseHttpsRedirection();

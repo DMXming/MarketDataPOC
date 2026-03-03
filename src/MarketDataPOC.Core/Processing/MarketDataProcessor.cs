@@ -1,18 +1,20 @@
-using MarketDataPOC.Core.Abstractions;
-using MarketDataPOC.Core.Models;
-using MarketDataPOC.Core.Pooling;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.ObjectPool;
-using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using Microsoft.Extensions.ObjectPool;
+using Microsoft.Extensions.Options;
+using MarketDataPOC.Core.Abstractions;
+using MarketDataPOC.Core.Models;
+using MarketDataPOC.Core.Pooling;
 
 namespace MarketDataPOC.Core.Processing
 {
+    /// <summary>
+    /// 处理器配置选项
+    /// </summary>
     public class ProcessorOptions
     {
         public int ChannelCapacity { get; set; } = 100000;
@@ -22,36 +24,36 @@ namespace MarketDataPOC.Core.Processing
         public int MetricsIntervalSeconds { get; set; } = 5;
     }
 
+    /// <summary>
+    /// 市场数据处理器实现
+    /// </summary>
     public class MarketDataProcessor : IMarketDataProcessor
     {
         private readonly Channel<ReusableMarketData> _channel;
         private readonly IProtocolAdapter[] _adapters;
         private readonly ISubscriptionManager _subscriptionManager;
         private readonly ObjectPool<ReusableMarketData> _marketDataPool;
+        private readonly MetricsCollector _metrics;
         private readonly ProcessorOptions _options;
-        private readonly ILogger<MarketDataProcessor> _logger;
-        private readonly List<IObserver<MarketData>> _observers = new();
-        private readonly ConcurrentDictionary<string, IProtocolAdapter> _adapterMap;
+        private readonly ConcurrentDictionary<ProtocolType, IProtocolAdapter> _adapterMap;
         private readonly Task _processingTask;
         private readonly CancellationTokenSource _cts = new();
-        
+        private readonly List<IObserver<MarketData>> _observers = new();
 
         public MarketDataProcessor(
             IEnumerable<IProtocolAdapter> adapters,
             ISubscriptionManager subscriptionManager,
-            IOptions<ProcessorOptions> options,
-            ILogger<MarketDataProcessor> logger)
+            IOptions<ProcessorOptions> options)
         {
             _adapters = adapters as IProtocolAdapter[] ?? throw new ArgumentNullException(nameof(adapters));
             _subscriptionManager = subscriptionManager ?? throw new ArgumentNullException(nameof(subscriptionManager));
             _options = options.Value;
-            _logger = logger;
 
             // 初始化适配器映射
-            _adapterMap = new ConcurrentDictionary<string, IProtocolAdapter>();
+            _adapterMap = new ConcurrentDictionary<ProtocolType, IProtocolAdapter>();
             foreach (var adapter in _adapters)
             {
-                _adapterMap[adapter.ProtocolType.ToString()] = adapter;
+                _adapterMap[adapter.ProtocolType] = adapter;
             }
 
             // 配置高性能通道
@@ -69,6 +71,8 @@ namespace MarketDataPOC.Core.Processing
                 new MarketDataPoolPolicy(),
                 _options.PoolSize);
 
+            _metrics = new MetricsCollector(_options.MetricsIntervalSeconds);
+
             // 启动处理任务
             _processingTask = Task.Run(ProcessMessagesAsync);
         }
@@ -78,6 +82,7 @@ namespace MarketDataPOC.Core.Processing
             var adapter = GetAdapter(protocol);
             if (adapter == null)
             {
+                _metrics.IncrementErrors($"No adapter for protocol: {protocol}");
                 return;
             }
 
@@ -98,24 +103,29 @@ namespace MarketDataPOC.Core.Processing
                         // 通道满，等待异步写入
                         await _channel.Writer.WriteAsync(marketData, _cts.Token);
                     }
+
+                    _metrics.IncrementPublished();
                 }
                 else
                 {
                     // 解析失败，归还对象
                     _marketDataPool.Return(marketData);
+                    _metrics.IncrementParseErrors();
                 }
             }
             catch (Exception ex)
             {
                 // 发生异常，归还对象
                 _marketDataPool.Return(marketData);
+                _metrics.IncrementErrors(ex.Message);
                 throw;
             }
         }
 
         private IProtocolAdapter? GetAdapter(ProtocolType protocol)
         {
-            return _adapterMap.GetValueOrDefault(protocol.ToString());
+            _adapterMap.TryGetValue(protocol, out var adapter);
+            return adapter;
         }
 
         private async Task ProcessMessagesAsync()
@@ -146,6 +156,7 @@ namespace MarketDataPOC.Core.Processing
                     });
 
                     stopwatch.Stop();
+                    _metrics.RecordBatchProcessing(batch.Count, stopwatch.Elapsed);
                 }
             }
             catch (OperationCanceledException)
@@ -154,6 +165,7 @@ namespace MarketDataPOC.Core.Processing
             }
             catch (Exception ex)
             {
+                _metrics.IncrementErrors($"Processing error: {ex.Message}");
             }
         }
 
@@ -164,6 +176,7 @@ namespace MarketDataPOC.Core.Processing
                 // 数据校验
                 if (!ValidateMarketData(marketData))
                 {
+                    _metrics.IncrementInvalid();
                     _marketDataPool.Return(marketData);
                     return;
                 }
@@ -177,11 +190,14 @@ namespace MarketDataPOC.Core.Processing
                 // 通知观察者
                 NotifyObservers(immutableData);
 
+                _metrics.IncrementProcessed();
+
                 // 归还对象到池
                 _marketDataPool.Return(marketData);
             }
             catch (Exception ex)
             {
+                _metrics.IncrementErrors($"Process error: {ex.Message}");
                 _marketDataPool.Return(marketData);
             }
         }
@@ -216,6 +232,13 @@ namespace MarketDataPOC.Core.Processing
                     // 忽略单个观察者的异常
                 }
             }
+        }
+
+        public ProcessorMetrics GetMetrics()
+        {
+            var metrics = _metrics.GetCurrent();
+            metrics.QueueLength = _channel.Reader.Count;
+            return metrics;
         }
 
         public IDisposable Subscribe(IObserver<MarketData> observer)

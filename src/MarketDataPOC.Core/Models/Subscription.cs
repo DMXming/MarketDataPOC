@@ -15,4 +15,21 @@ namespace MarketDataPOC.Core.Models
         public string? SubscriptionId { get; set; }
         public string? Error { get; set; }
     }
+
+    /// <summary>
+    /// 处理器指标
+    /// </summary>
+    public class ProcessorMetrics
+    {
+        public long ProcessedCount { get; set; }
+        public long PublishedCount { get; set; }
+        public long ErrorCount { get; set; }
+        public long ParseErrorCount { get; set; }
+        public long InvalidCount { get; set; }
+        public double AvgLatencyMicroseconds { get; set; }
+        public double P99LatencyMicroseconds { get; set; }
+        public int QueueLength { get; set; }
+        public double PoolHitRate { get; set; }
+        public DateTime LastUpdateTime { get; set; }
+    }
 }

@@ -15,5 +15,10 @@ namespace MarketDataPOC.Core.Abstractions
         /// 订阅处理事件
         /// </summary>
         IDisposable Subscribe(IObserver<MarketData> observer);
+
+        /// <summary>
+        /// 获取当前处理指标
+        /// </summary>
+        ProcessorMetrics GetMetrics();
     }
 }
