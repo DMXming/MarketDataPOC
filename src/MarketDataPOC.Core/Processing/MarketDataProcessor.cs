@@ -32,8 +32,8 @@ namespace MarketDataPOC.Core.Processing
         private readonly Channel<ReusableMarketData> _channel;
         private readonly IProtocolAdapter[] _adapters;
         private readonly ISubscriptionManager _subscriptionManager;
-        private readonly ObjectPool<ReusableMarketData> _marketDataPool;
-        private readonly MetricsCollector _metrics;
+        protected readonly ObjectPool<ReusableMarketData> _marketDataPool;
+        protected readonly MetricsCollector _metrics;
         private readonly ProcessorOptions _options;
         private readonly ConcurrentDictionary<ProtocolType, IProtocolAdapter> _adapterMap;
         private readonly Task _processingTask;
@@ -169,7 +169,7 @@ namespace MarketDataPOC.Core.Processing
             }
         }
 
-        private void ProcessSingleMessage(ReusableMarketData marketData)
+        protected virtual Task ProcessSingleMessage(ReusableMarketData marketData)
         {
             try
             {
@@ -178,7 +178,7 @@ namespace MarketDataPOC.Core.Processing
                 {
                     _metrics.IncrementInvalid();
                     _marketDataPool.Return(marketData);
-                    return;
+                    return Task.CompletedTask;
                 }
 
                 // 转换为不可变对象用于分发
@@ -200,6 +200,8 @@ namespace MarketDataPOC.Core.Processing
                 _metrics.IncrementErrors($"Process error: {ex.Message}");
                 _marketDataPool.Return(marketData);
             }
+
+            return Task.CompletedTask;
         }
 
         private bool ValidateMarketData(ReusableMarketData data)
@@ -219,7 +221,7 @@ namespace MarketDataPOC.Core.Processing
             return true;
         }
 
-        private void NotifyObservers(MarketData data)
+        protected void NotifyObservers(MarketData data)
         {
             foreach (var observer in _observers)
             {

@@ -2,16 +2,29 @@ using System.Buffers;
 
 namespace MarketDataPOC.Core.Pooling
 {
-    public class ArrayPoolBuffer
+  /// <summary>
+    /// 可释放的数组池缓冲区
+    /// </summary>
+    public ref struct ArrayPoolBuffer
     {
-        public byte[] Rent(int minimumLength)
+        private byte[]? _array;
+        private readonly int _length;
+
+        public ArrayPoolBuffer(int minimumLength)
         {
-            return ArrayPool<byte>.Shared.Rent(minimumLength);
+            _array = ArrayPool<byte>.Shared.Rent(minimumLength);
+            _length = _array.Length;
         }
 
-        public void Return(byte[] buffer)
+        public readonly Span<byte> Span => _array.AsSpan(0, _length);
+
+        public void Dispose()
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            if (_array != null)
+            {
+                ArrayPool<byte>.Shared.Return(_array);
+                _array = null;
+            }
         }
     }
 }
