@@ -1,11 +1,15 @@
 using MarketDataPOC.Core.Abstractions;
+using MarketDataPOC.Core.Models;
 
 namespace MarketDataPOC.Adapters
 {
     public class BinaryAdapter : IProtocolAdapter
     {
-        public string Serialize<T>(T obj) => throw new System.NotImplementedException("Binary serialization not implemented in POC.");
+        public ProtocolType ProtocolType => throw new NotImplementedException();
 
-        public T? Deserialize<T>(string payload) => throw new System.NotImplementedException("Binary deserialization not implemented in POC.");
+        public bool TryParse(ReadOnlySpan<byte> data, ref ReusableMarketData marketData)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

@@ -4,7 +4,11 @@ using System.Text;
 
 namespace MarketDataPOC.Core.Models
 {
-    internal class ProtocolType
+    public enum ProtocolType
     {
+        Unknown = 0,
+        Json = 1,
+        Binary = 2,
+        Protobuf = 3
     }
 }
