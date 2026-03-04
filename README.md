@@ -16,10 +16,3 @@ Quick start:
    - `dotnet build`
    - `dotnet run --project src/MarketDataPOC.Api/MarketDataPOC.Api.csproj`
 2. API will be available on the configured port (see docker-compose for containerized example).
-
-Formatting:
-- Run the Visual Studio command __Format Document__ before committing.
-- Project rules are enforced by `.editorconfig`.
-
-Contributing:
-- See `CONTRIBUTING.md` for branch, commit and PR guidelines.
